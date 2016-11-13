@@ -1,0 +1,5 @@
+- name: restart supervisord
+  ignore_errors: yes
+  service:
+      name=supervisord
+      state=restarted

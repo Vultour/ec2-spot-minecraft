@@ -1,0 +1,30 @@
+#!/bin/bash
+
+if [ -z $1 ] || [ -z $2 ]; then
+    echo "USAGE: $0 <server-path> <world-name>"
+    exit 1
+fi
+
+
+SERVER_ROOT="$1/$2"
+BACKUP_PATH="$SERVER_ROOT/backups"
+BACKUP_FIRST="{{ minecraft_s3_backup_name }}.tar.gz"
+BACKUP_SECOND="{{ minecraft_s3_backup_name }}.tar.gz.2"
+
+
+if [ ! -d $SERVER_ROOT/world ]; then
+    echo "ERROR: No world present"
+    exit 2
+fi
+
+if [ ! -d $BACKUP_PATH ]; then
+    mkdir -p $BACKUP_PATH
+fi
+
+if [ -e $BACKUP_PATH/$BACKUP_FIRST ]; then
+    mv $BACKUP_PATH/$BACKUP_FIRST $BACKUP_PATH/$BACKUP_SECOND
+    aws s3 cp $BACKUP_PATH/$BACKUP_SECOND s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/$2/_latest.tar.gz.2
+fi
+
+tar -czf $BACKUP_PATH/$BACKUP_FIRST -C $SERVER_ROOT world/
+aws s3 cp $BACKUP_PATH/$BACKUP_FIRST s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/$2/_latest.tar.gz

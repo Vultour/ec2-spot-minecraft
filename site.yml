@@ -1,0 +1,9 @@
+---
+- hosts: all
+  roles:
+      - centos
+      - minecraft
+  vars_files:
+      - secrets.yml
+  become: yes
+  become_method: sudo

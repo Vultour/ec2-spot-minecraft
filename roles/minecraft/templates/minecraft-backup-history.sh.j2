@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if [ -z $1 ] || [ -z $2 ]; then
+    echo "USAGE: $0 <server-path> <world-name>"
+    exit 1
+fi
+
+
+BACKUP_LOCAL="$1/$2/backups/{{ minecraft_s3_backup_name }}.tar.gz"
+BACKUP_REMOTE="$2--$(date '+%Y-%d-%m_%H-%M-%S').tar.gz"
+
+aws s3 cp $BACKUP_LOCAL s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/$2/$BACKUP_REMOTE

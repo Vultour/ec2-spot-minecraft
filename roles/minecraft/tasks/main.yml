@@ -1,0 +1,191 @@
+---
+- name: Remove OpenJDK 6
+  package:
+      name=java-1.6.0-openjdk
+      state=absent
+
+- name: Remove OpenJDK 7
+  package:
+      name=java-1.7.0-openjdk
+      state=absent
+
+- name: Install OpenJDK 8 environment
+  package:
+      name=java-1.8.0-openjdk
+      state=latest
+
+- name: Install OpenJDK 8 runtime
+  package:
+      name=java-1.8.0-openjdk-headless
+      state=latest
+
+- name: Update pip (1)
+  ignore_errors: yes
+  pip:
+      executable=/usr/local/bin/pip
+      name=pip
+      state=latest
+
+- name: Update pip (2)
+  ignore_errors: yes
+  pip:
+      executable=/usr/bin/pip
+      name=pip
+      state=latest
+
+- name: Install Supervisord
+  pip:
+      executable=/usr/local/bin/pip
+      name=supervisor
+  notify:
+      - restart supervisord
+
+- name: Create Supervisord configuration
+  template:
+      src=roles/minecraft/templates/supervisord.conf.j2
+      dest=/etc/supervisord.conf
+      owner=root
+      group=root
+      mode="u=rw,g=r,o-rwx"
+  notify:
+      - restart supervisord
+
+- name: Create init script for Supervisord
+  copy:
+      src=roles/minecraft/files/supervisord-init.sh
+      dest=/etc/init.d/supervisord
+      owner=root
+      group=root
+      mode="u=rwx,g=r,o-rwx"
+  notify:
+      - restart supervisord
+
+- name: Enable Supervisord
+  service:
+      name=supervisord
+      enabled=yes
+  notify:
+      - restart supervisord
+
+- name: Minecraft - create user
+  user:
+      name={{ minecraft_server_user }}
+      state=present
+      shell=/bin/bash
+      home={{ minecraft_server_path }}
+
+- name: Minecraft - create directory for current world
+  file:
+      path={{ minecraft_server_path }}/{{ minecraft_world_name }}
+      state=directory
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rwx,g=rx,o-rwx"
+
+- name: Minecraft - download server binaries
+  get_url:
+      url: "{{ minecraft_server_download_url }}"
+      dest: /tmp/minecraft-server.zip
+
+#- name: Minecraft - unpack server binaries
+#  unarchive:
+#      src=/tmp/minecraft-server.zip
+#      dest={{ minecraft_server_path }}/{{ minecraft_world_name }}
+#      remote_src=yes
+#      copy=no
+
+- name: Minecraft - unpack server binaries
+  become: yes
+  become_user: minecraft
+  become_method: sudo
+  command:
+      /usr/bin/unzip -d {{ minecraft_server_path }}/{{ minecraft_world_name }}/ /tmp/minecraft-server.zip
+      creates={{ minecraft_server_path }}/{{ minecraft_world_name }}/eula.txt
+
+- name: AWS - create directory
+  file:
+      path={{ minecraft_server_path}}/.aws
+      state=directory
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rwx,g=rx,o-rwx"
+
+- name: AWS - create config
+  template:
+      src=roles/minecraft/templates/aws-config.j2
+      dest={{ minecraft_server_path }}/.aws/config
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rw,g=r,o-rwx"
+
+- name: AWS - create credentials
+  template:
+      src=roles/minecraft/templates/aws-credentials.j2
+      dest={{ minecraft_server_path }}/.aws/credentials
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rw,g=r,o-rwx"
+
+- name: Minecraft - copy frequent backup script
+  template:
+      src=roles/minecraft/templates/minecraft-backup-latest.sh.j2
+      dest={{ minecraft_server_path }}/minecraft-backup-latest.sh
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rwx,g=rw,o=r"
+
+- name: Minecraft - copy history backup script
+  template:
+      src=roles/minecraft/templates/minecraft-backup-history.sh.j2
+      dest={{ minecraft_server_path }}/minecraft-backup-history.sh
+      owner={{ minecraft_server_user }}
+      group={{ minecraft_server_user }}
+      mode="u=rwx,g=rw,o=r"
+
+- name: Minecraft - create cron entry for frequent backups
+  cron:
+      name="latest backup"
+      job="{{ minecraft_server_path }}/minecraft-backup-latest.sh {{ minecraft_server_path }} {{minecraft_world_name }}"
+      user="{{ minecraft_server_user }}"
+      minute="*/5"
+
+- name: Minecraft - create cron entry for history backups
+  cron:
+      name="history backup"
+      job="{{ minecraft_server_path }}/minecraft-backup-history.sh {{ minecraft_server_path }} {{minecraft_world_name }}"
+      user="{{ minecraft_server_user }}"
+      minute="3"
+
+- name: Minecraft - accept eula
+  command:
+      /bin/sed -i 's/eula=false/eula=true/' {{ minecraft_server_path}}/{{ minecraft_world_name }}/eula.txt
+
+- name: Minecraft - ensure server start script is executable
+  file:
+      path={{ minecraft_server_path }}/{{ minecraft_world_name}}/ServerStart.sh
+      mode="u+x"
+
+- name: Minecraft - check if world exists
+  stat:
+      path={{ minecraft_server_path }}/{{ minecraft_world_name }}/world
+  register: p
+
+- name: Minecraft - download latest save
+  become: yes
+  become_user: minecraft
+  become_method: sudo
+  command:
+      /usr/bin/aws s3 cp s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/{{ minecraft_world_name }}/_latest.tar.gz /tmp/mc-world-latest.tar.gz
+  ignore_errors: yes
+
+- name: Minecraft - unpack latest save
+  become: yes
+  become_user: minecraft
+  become_method: sudo
+  command:
+      /bin/tar -xzf /tmp/mc-world-latest.tar.gz -C {{ minecraft_server_path }}/{{ minecraft_world_name }}/
+  when: not p.stat.exists
+  ignore_errors: yes
+  notify:
+      - restart supervisord
+

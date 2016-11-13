@@ -1,0 +1,12 @@
+---
+minecraft_server_user: minecraft
+minecraft_server_path: /srv/minecraft
+
+supervisor_inet_user: iamadmin
+supervisor_inet_password: wontguessthis
+
+minecraft_server_download_url: https://www.feed-the-beast.com/projects/ftb-infinity-evolved/files/2320899/download
+minecraft_world_name: ftb-infinity-evolved
+
+minecraft_s3_path: minecraft
+minecraft_s3_backup_name: s3_backup
