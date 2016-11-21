@@ -26,5 +26,5 @@ if [ -e $BACKUP_PATH/$BACKUP_FIRST ]; then
     aws s3 cp $BACKUP_PATH/$BACKUP_SECOND s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/$2/_latest.tar.gz.2
 fi
 
-tar -czf $BACKUP_PATH/$BACKUP_FIRST -C $SERVER_ROOT world/
+tar -czf $BACKUP_PATH/$BACKUP_FIRST -C $SERVER_ROOT world/ config/ server.properties
 aws s3 cp $BACKUP_PATH/$BACKUP_FIRST s3://{{ AWS_BUCKET }}/{{ minecraft_s3_path }}/$2/_latest.tar.gz
